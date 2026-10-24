@@ -61,7 +61,7 @@ textarea{width:100%;height:160px;font:13px/1.4 ui-monospace,Menlo,Consolas,monos
 <h2>Вклады и счета</h2>
 <div class="wrap"><table><thead><tr id="dh"></tr></thead><tbody id="db"></tbody><tfoot id="df"></tfoot></table></div>
 <div class="actions"><button class="primary" id="addd">Добавить строку</button><button id="pasted">Вставить из таблицы</button></div>
-<p class="note">Ставка годовая, 0 — без процентов, проценты капитализируются. Суммы в $ и € переводятся в гривны по курсам сверху.</p>
+<p class="note">Ставка годовая, 0 — без процентов, проценты капитализируются. Для срочных вкладов укажите дату окончания: после неё проценты не начисляются (сумма остаётся такой, какой была на эту дату); без даты вклад считается бессрочным. Суммы в $ и € переводятся в гривны по курсам сверху.</p>
 
 <h2>Облигации</h2>
 <div class="wrap"><table><thead><tr id="bh"></tr></thead><tbody id="bb"></tbody><tfoot id="bf"></tfoot></table></div>
@@ -116,7 +116,7 @@ const fmt = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFr
 const num = v => { const n = parseFloat(String(v).replace(/\s/g, "").replace(",", ".").replace("%", "")); return isFinite(n) ? n : 0; };
 const rateOf = c => c === "UAH" ? 1 : (S.rates[c] || 0);
 const esc = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-const growDep = (base, pct, m) => { const n = +S.comp; return base * Math.pow(1 + pct / 100 / n, n * m / 12); };
+const growDep = (base, pct, m, d) => { const n = +S.comp; return base * Math.pow(1 + pct / 100 / n, n * Math.min(m, monthsTo(d)) / 12); };
 const monthsTo = d => { if (!d) return Infinity; const t = new Date(d + "T00:00:00"); return isNaN(t) ? Infinity : Math.max(0, (t - Date.now()) / 86400000 / 30.4375); };
 const bondVal = (b, m) => b.amount + b.qty * S.nominal * b.pct / 100 * Math.min(m, monthsTo(b.date)) / 12;
 
@@ -134,16 +134,17 @@ function render() {
   document.getElementById("comp").value = S.comp;
   document.getElementById("nom").value = S.nominal;
 
-  document.getElementById("dh").innerHTML = `<th>Где лежит</th><th>Сумма</th><th>Валюта</th><th>Сумма, ₴</th><th>Ставка, %</th>${perHead(true)}<th></th>`;
+  document.getElementById("dh").innerHTML = `<th>Где лежит</th><th>Сумма</th><th>Валюта</th><th>Сумма, ₴</th><th>Ставка, %</th><th>Окончание</th>${perHead(true)}<th></th>`;
   document.getElementById("db").innerHTML = S.rows.map((r, i) => `<tr>
     <td class="name">${inp("d", i, "name", r.name, "text")}</td>
     <td class="in">${inp("d", i, "amount", r.amount)}</td>
     <td class="cc"><select data-t="d" data-i="${i}" data-f="cur" aria-label="Валюта">${Object.keys(SYM).map(k => `<option value="${k}"${r.cur === k ? " selected" : ""}>${SYM[k]} ${k}</option>`).join("")}</select></td>
     <td data-c="db${i}"></td><td class="rate">${inp("d", i, "pct", r.pct)}</td>
+    <td class="dt">${inp("d", i, "date", r.date || "", "text", "date")}</td>
     ${cells(`dv${i}_`, n)}<td class="x"><button class="del" data-del="d${i}" aria-label="Удалить" title="Удалить">×</button></td></tr>`).join("");
   document.getElementById("df").innerHTML =
-    `<tr><td>Итого, ₴</td><td></td><td></td><td data-c="dtb"></td><td></td>${cells("dt", n)}<td></td></tr>
-     <tr class="gain"><td>Прирост, ₴</td><td></td><td></td><td></td><td></td>${cells("dg", n)}<td></td></tr>`;
+    `<tr><td>Итого, ₴</td><td></td><td></td><td data-c="dtb"></td><td></td><td></td>${cells("dt", n)}<td></td></tr>
+     <tr class="gain"><td>Прирост, ₴</td><td></td><td></td><td></td><td></td><td></td>${cells("dg", n)}<td></td></tr>`;
 
   document.getElementById("bh").innerHTML = `<th>Выпуск</th><th>Вложено, ₴</th><th>Шт.</th><th>Номинал, ₴</th><th>Переплата, ₴</th><th>Ставка, %</th><th>Погашение</th>${perHead(false)}<th></th>`;
   document.getElementById("bb").innerHTML = S.bonds.map((b, i) => `<tr>
@@ -172,7 +173,7 @@ function calc() {
   let dBase = 0, bInv = 0, bQty = 0, bNom = 0; const dT = z(), bT = z();
   S.rows.forEach((r, i) => {
     const base = r.amount * rateOf(r.cur); dBase += base; set("db" + i, base);
-    P.forEach((p, j) => { const v = growDep(base, r.pct, p); dT[j] += v; set(`dv${i}_${j}`, v); });
+    P.forEach((p, j) => { const v = growDep(base, r.pct, p, r.date); dT[j] += v; set(`dv${i}_${j}`, v); });
   });
   set("dtb", dBase);
   S.bonds.forEach((b, i) => {
@@ -214,7 +215,7 @@ document.getElementById("reset").onclick = () => { if (confirm("Сбросить
 const dlg = document.getElementById("dlg"), ta = document.getElementById("ta");
 let mode = "d";
 const TXT = {
-  d: "Вставьте строки: место, сумма, курс (или USD/EUR/UAH), … , ставка %. Валюта определяется по курсу: он должен совпадать с курсом доллара или евро сверху (1 — гривна).",
+  d: "Вставьте строки: место, сумма, курс (или USD/EUR/UAH), … , ставка %, дата окончания (дд.мм.гггг). Валюта определяется по курсу: он должен совпадать с курсом доллара или евро сверху; если курса нет или он не совпал — это гривна. Ставка и дата ищутся по виду, поэтому пустые столбцы не мешают.",
   b: "Вставьте строки из таблицы: выпуск, сумма покупки, … , ставка %, дата погашения (дд.мм.гггг), количество облигаций. Лишние столбцы с суммами игнорируются."
 };
 document.getElementById("pasted").onclick = () => { mode = "d"; open_(); };
@@ -229,14 +230,20 @@ function curFrom(tok) {
   if (Math.abs(r - 1) < 1e-9) return "UAH";
   if (Math.abs(r - S.rates.EUR) < 1e-3) return "EUR";
   if (Math.abs(r - S.rates.USD) < 1e-3) return "USD";
-  return "USD";
+  return "UAH";
 }
+const isDate = x => /^\d{1,2}\.\d{1,2}\.\d{4}$/.test(x);
+const isoDate = x => { const [dd, mm, yy] = x.split("."); return `${yy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`; };
 function parseDep(text) {
   return text.split(/\n/).map(l => l.trim()).filter(Boolean).map(l => {
-    const t = l.split(/\t+|\s{2,}|\s+(?=[-\d$€₴])/).filter(Boolean);
-    if (t.length < 3) return null;
-    const last = t[t.length - 1];
-    return { name: t[0], amount: num(t[1]), cur: curFrom(t[2]), pct: t.length > 3 && /%/.test(last) ? num(last) : 0 };
+    let t = l.split(/\t+/).map(x => x.trim()).filter(Boolean);
+    if (t.length < 3) t = l.split(/\t+|\s{2,}|\s+(?=[-\d$€₴])/).map(x => x.trim()).filter(Boolean);
+    if (t.length < 2) return null;
+    const di = t.findIndex(isDate);
+    let pi = -1; t.forEach((x, k) => { if (/%/.test(x)) pi = k; });
+    const tok = t[2], isRate = tok && !isDate(tok) && !/%/.test(tok);
+    return { name: t[0], amount: num(t[1]), cur: isRate ? curFrom(tok) : "UAH",
+             pct: pi >= 0 ? num(t[pi]) : 0, date: di >= 0 ? isoDate(t[di]) : "" };
   }).filter(Boolean);
 }
 function parseBonds(text) {
