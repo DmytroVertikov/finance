@@ -162,7 +162,9 @@ function render() {
   document.getElementById("ah").innerHTML = `<th></th><th>Сейчас</th>${perHead(false)}`;
   document.getElementById("ab").innerHTML =
     `<tr><td><b>Все вложения, ₴</b></td><td data-c="anow"></td>${cells("a", n)}</tr>
-     <tr class="gain"><td>Прирост, ₴</td><td></td>${cells("ag", n)}</tr>`;
+     <tr class="gain"><td>Прирост, ₴</td><td></td>${cells("ag", n)}</tr>
+     <tr class="gain"><td>Прирост, $</td><td></td>${cells("agu", n)}</tr>
+     <tr class="gain"><td>Прирост, €</td><td></td>${cells("age", n)}</tr>`;
   calc();
 }
 
@@ -186,7 +188,8 @@ function calc() {
   P.forEach((_, j) => {
     set("dt" + j, dT[j]); set("dg" + j, dT[j] - dBase);
     set("bt" + j, bT[j]); set("bg" + j, bT[j] - bInv);
-    set("a" + j, dT[j] + bT[j]); set("ag" + j, dT[j] + bT[j] - all0);
+    set("a" + j, dT[j] + bT[j]); const g = dT[j] + bT[j] - all0; set("ag" + j, g);
+    set("agu" + j, S.rates.USD ? g / S.rates.USD : 0); set("age" + j, S.rates.EUR ? g / S.rates.EUR : 0);
   });
 }
 
