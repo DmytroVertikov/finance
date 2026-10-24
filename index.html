@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Мои финансы</title>
 <style>
-:root{--bg:#f2f4f1;--surface:#fff;--ink:#1b2a27;--muted:#5d6b67;--line:#d5dcd8;--accent:#0f6b5c;--accent-ink:#fff;--gain:#0f6b5c;--head:#e4eae6}
-@media (prefers-color-scheme:dark){:root{--bg:#141b19;--surface:#1c2623;--ink:#e6ede9;--muted:#9aa9a4;--line:#2f3d39;--accent:#5fc3ae;--accent-ink:#0d1b17;--gain:#5fc3ae;--head:#25322e}}
+:root{--bg:#f2f4f1;--surface:#fff;--ink:#1b2a27;--muted:#5d6b67;--line:#d5dcd8;--accent:#0f6b5c;--accent-ink:#fff;--gain:#0f6b5c;--head:#e4eae6;--usd:#e2efdc;--eur:#e0e8f7}
+@media (prefers-color-scheme:dark){:root{--bg:#141b19;--surface:#1c2623;--ink:#e6ede9;--muted:#9aa9a4;--line:#2f3d39;--accent:#5fc3ae;--accent-ink:#0d1b17;--gain:#5fc3ae;--head:#25322e;--usd:#233829;--eur:#232f45}}
 *{box-sizing:border-box}
 html{background:var(--bg)}
 body{margin:0;padding:24px 16px 48px;font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg)}
@@ -30,6 +30,8 @@ td input:hover{border-color:var(--line)}
 td input:focus,.per:focus,.rates input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px}
 td.in input{width:110px}td.name input{min-width:120px}td.rate input,td.qty input{width:76px}td.dt input{width:140px;text-align:left}
 td.x{width:36px;text-align:center}td.mut{color:var(--muted)}
+tr.c-USD td{background:var(--usd)}tr.c-EUR td{background:var(--eur)}
+.chip{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--line);vertical-align:-1px;margin:0 4px 0 10px}
 tfoot td{font-weight:600;background:var(--head)}
 tfoot tr.gain td,.gain td{color:var(--gain)}
 button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:6px 12px}
@@ -62,6 +64,7 @@ textarea{width:100%;height:160px;font:13px/1.4 ui-monospace,Menlo,Consolas,monos
 <h2>Вклады и счета</h2>
 <div class="wrap"><table><thead><tr id="dh"></tr></thead><tbody id="db"></tbody><tfoot id="df"></tfoot></table></div>
 <div class="actions"><button class="primary" id="addd">Добавить строку</button><button id="pasted">Вставить из таблицы</button></div>
+<p class="note">Цвет строки: <span class="chip" style="background:var(--usd)"></span>доллары <span class="chip" style="background:var(--eur)"></span>евро, гривны без заливки.</p>
 <p class="note">Ставка годовая (до налога), 0 — без процентов, проценты капитализируются. По вкладам и счетам в гривне из начисленных процентов вычитается налог (по умолчанию 23% = 18% НДФЛ + 5% военный сбор; меняется сверху), по валютным и облигациям налог не учитывается. Для срочных вкладов укажите дату окончания: после неё проценты не начисляются (сумма остаётся такой, какой была на эту дату); без даты вклад считается бессрочным. Суммы в $ и € переводятся в гривны по курсам сверху.</p>
 
 <h2>Облигации</h2>
@@ -137,7 +140,7 @@ function render() {
   document.getElementById("tax").value = S.tax;
 
   document.getElementById("dh").innerHTML = `<th>Где лежит</th><th>Сумма</th><th>Валюта</th><th>Сумма, ₴</th><th>Ставка, %</th><th>Окончание</th>${perHead(true)}<th></th>`;
-  document.getElementById("db").innerHTML = S.rows.map((r, i) => `<tr>
+  document.getElementById("db").innerHTML = S.rows.map((r, i) => `<tr class="c-${r.cur}">
     <td class="name">${inp("d", i, "name", r.name, "text")}</td>
     <td class="in">${inp("d", i, "amount", r.amount)}</td>
     <td class="cc"><select data-t="d" data-i="${i}" data-f="cur" aria-label="Валюта">${Object.keys(SYM).map(k => `<option value="${k}"${r.cur === k ? " selected" : ""}>${SYM[k]} ${k}</option>`).join("")}</select></td>
@@ -205,6 +208,7 @@ document.addEventListener("input", e => {
   else if (d.t) {
     const row = (d.t === "d" ? S.rows : S.bonds)[d.i];
     row[d.f] = ["name", "cur", "date"].includes(d.f) ? t.value : num(t.value);
+    if (d.t === "d" && d.f === "cur") t.closest("tr").className = "c-" + t.value;
   } else return;
   calc(); save();
 });
