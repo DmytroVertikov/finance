@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Мои финансы</title>
+<style>
+:root{--bg:#f2f4f1;--surface:#fff;--ink:#1b2a27;--muted:#5d6b67;--line:#d5dcd8;--accent:#0f6b5c;--accent-ink:#fff;--gain:#0f6b5c;--head:#e4eae6}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#141b19;--surface:#1c2623;--ink:#e6ede9;--muted:#9aa9a4;--line:#2f3d39;--accent:#5fc3ae;--accent-ink:#0d1b17;--gain:#5fc3ae;--head:#25322e}}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;padding:24px 16px 48px;font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+main{max-width:1100px;margin:0 auto}
+h1{font:600 28px/1.2 Georgia,"Times New Roman",serif;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 20px;max-width:60ch}
+.bar{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;margin-bottom:16px}
+.bar label{display:flex;gap:8px;align-items:center;color:var(--muted)}
+.bar input,.bar select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+.bar input{width:84px}
+.wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;min-width:900px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+thead th{background:var(--head);font-weight:600;white-space:nowrap}
+th .per{width:56px;text-align:right;font:inherit;font-weight:600;color:var(--ink);background:transparent;border:0;border-bottom:1px dashed var(--muted)}
+td input{width:100%;font:inherit;color:var(--ink);background:transparent;border:1px solid transparent;border-radius:4px;padding:4px 6px;text-align:inherit}
+td input:hover{border-color:var(--line)}
+td input:focus,.per:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+td.in input{width:110px}
+td.name input{min-width:120px}
+td.rate input{width:80px}
+td.x{width:36px;text-align:center}
+tfoot td{font-weight:600;background:var(--head)}
+tfoot tr.gain td{color:var(--gain)}
+button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:6px 12px}
+button:hover{border-color:var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.del{border:0;background:none;color:var(--muted);padding:2px 8px;font-size:18px;line-height:1}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+dialog{border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);max-width:560px;width:calc(100% - 32px)}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+textarea{width:100%;height:160px;font:13px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
+.note{color:var(--muted);font-size:13px;max-width:80ch}
+</style>
+</head>
+<body>
+<main>
+<h1>Мои финансы</h1>
+<p class="sub">Сумма вместе с накопленными процентами через выбранные сроки. Меняйте любые поля — всё пересчитывается и сохраняется в этом браузере.</p>
+
+<div class="bar">
+  <label>Базовая валюта <input id="cur" value="₽" maxlength="6"></label>
+  <label>Начисление процентов
+    <select id="comp">
+      <option value="12">ежемесячно</option>
+      <option value="4">раз в квартал</option>
+      <option value="1">раз в год</option>
+    </select>
+  </label>
+</div>
+
+<div class="wrap"><table>
+  <thead><tr id="hr"></tr></thead>
+  <tbody id="tb"></tbody>
+  <tfoot id="tf"></tfoot>
+</table></div>
+
+<div class="actions">
+  <button class="primary" id="add">Добавить строку</button>
+  <button id="paste">Вставить из таблицы</button>
+  <button id="exp">Скачать данные</button>
+  <button id="imp">Загрузить данные</button>
+  <button id="reset">Сбросить</button>
+  <input type="file" id="file" accept="application/json" hidden>
+</div>
+
+<p class="note">Ставка годовая, 0 — без процентов. Курс переводит сумму в базовую валюту. Налоги и комиссии не учитываются. Данные хранятся только в вашем браузере (localStorage) и не отправляются никуда; чтобы перенести их на другое устройство, скачайте файл и загрузите там.</p>
+</main>
+
+<dialog id="dlg">
+  <form method="dialog">
+    <p>Вставьте строки: <em>место, сумма, курс, … , ставка %</em>. Разделитель — табуляция или пробелы, десятичная запятая допустима.</p>
+    <textarea id="ta" placeholder="Wise	4827,48	45,2021	218212,23	3,61%"></textarea>
+    <div class="actions">
+      <button class="primary" id="ok" value="ok">Заменить данные</button>
+      <button id="addp" value="add">Добавить к текущим</button>
+      <button value="cancel">Отмена</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const KEY = "finance-tracker-v1";
+const EXAMPLE = {
+  cur: "₽", comp: 12, periods: [1, 3, 6, 12, 24, 60],
+  rows: [
+    { name: "Пример: вклад", amount: 1000, rate: 50, pct: 4 },
+    { name: "Пример: счёт", amount: 500, rate: 45, pct: 0 }
+  ]
+};
+let S = load();
+
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.rows) return s; } catch (e) {}
+  return JSON.parse(JSON.stringify(EXAMPLE));
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+
+const fmt = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const num = v => { const n = parseFloat(String(v).replace(/\s/g, "").replace(",", ".").replace("%", "")); return isFinite(n) ? n : 0; };
+const grow = (base, pct, months) => { const n = +S.comp; return base * Math.pow(1 + pct / 100 / n, n * months / 12); };
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
+function render() {
+  document.getElementById("cur").value = S.cur;
+  document.getElementById("comp").value = S.comp;
+  const c = S.cur;
+  document.getElementById("hr").innerHTML =
+    `<th>Где лежит</th><th>Сумма</th><th>Курс</th><th>Сумма, ${esc(c)}</th><th>Ставка, %</th>` +
+    S.periods.map((p, i) => `<th>через <input class="per" data-p="${i}" value="${p}" inputmode="numeric" aria-label="Срок в месяцах"> мес.</th>`).join("") + `<th></th>`;
+  document.getElementById("tb").innerHTML = S.rows.map((r, i) => `<tr>
+    <td class="name"><input data-i="${i}" data-f="name" value="${esc(r.name)}" aria-label="Название"></td>
+    <td class="in"><input data-i="${i}" data-f="amount" value="${r.amount}" inputmode="decimal" aria-label="Сумма"></td>
+    <td class="rate"><input data-i="${i}" data-f="rate" value="${r.rate}" inputmode="decimal" aria-label="Курс"></td>
+    <td data-c="base${i}"></td>
+    <td class="rate"><input data-i="${i}" data-f="pct" value="${r.pct}" inputmode="decimal" aria-label="Ставка"></td>
+    ${S.periods.map((_, j) => `<td data-c="v${i}_${j}"></td>`).join("")}
+    <td class="x"><button class="del" data-del="${i}" aria-label="Удалить строку" title="Удалить">×</button></td></tr>`).join("");
+  document.getElementById("tf").innerHTML =
+    `<tr><td>Итого</td><td></td><td></td><td data-c="tbase"></td><td></td>${S.periods.map((_, j) => `<td data-c="t${j}"></td>`).join("")}<td></td></tr>
+     <tr class="gain"><td>Прирост</td><td></td><td></td><td></td><td></td>${S.periods.map((_, j) => `<td data-c="g${j}"></td>`).join("")}<td></td></tr>`;
+  calc();
+}
+
+function calc() {
+  const set = (k, v) => { const el = document.querySelector(`[data-c="${k}"]`); if (el) el.textContent = fmt.format(v); };
+  let tb = 0; const tp = S.periods.map(() => 0);
+  S.rows.forEach((r, i) => {
+    const base = r.amount * r.rate; tb += base; set("base" + i, base);
+    S.periods.forEach((p, j) => { const v = grow(base, r.pct, p); tp[j] += v; set(`v${i}_${j}`, v); });
+  });
+  set("tbase", tb);
+  tp.forEach((v, j) => { set("t" + j, v); set("g" + j, v - tb); });
+}
+
+document.addEventListener("input", e => {
+  const t = e.target;
+  if (t.id === "cur") S.cur = t.value;
+  else if (t.dataset.f) { const r = S.rows[t.dataset.i]; r[t.dataset.f] = t.dataset.f === "name" ? t.value : num(t.value); calc(); }
+  else if (t.dataset.p !== undefined) { S.periods[t.dataset.p] = Math.max(0, num(t.value)); calc(); }
+  else return;
+  save();
+});
+document.getElementById("cur").addEventListener("change", render);
+document.getElementById("comp").addEventListener("change", e => { S.comp = +e.target.value; save(); calc(); });
+document.addEventListener("click", e => {
+  const d = e.target.dataset.del;
+  if (d !== undefined) { S.rows.splice(d, 1); save(); render(); }
+});
+document.getElementById("add").onclick = () => { S.rows.push({ name: "Новая строка", amount: 0, rate: 1, pct: 0 }); save(); render(); };
+document.getElementById("reset").onclick = () => { if (confirm("Сбросить все данные до примера?")) { S = JSON.parse(JSON.stringify(EXAMPLE)); save(); render(); } };
+
+// Вставка из таблицы
+const dlg = document.getElementById("dlg"), ta = document.getElementById("ta");
+document.getElementById("paste").onclick = () => { ta.value = ""; dlg.showModal(); };
+function parse(text) {
+  return text.split(/\n/).map(l => l.trim()).filter(Boolean).map(l => {
+    const t = l.split(/\t+|\s{2,}|\s+(?=[-\d])/).filter(Boolean);
+    if (t.length < 3) return null;
+    const last = t[t.length - 1];
+    return { name: t[0], amount: num(t[1]), rate: num(t[2]), pct: t.length > 3 && /%/.test(last) ? num(last) : 0 };
+  }).filter(Boolean);
+}
+dlg.addEventListener("close", () => {
+  if (dlg.returnValue !== "ok" && dlg.returnValue !== "add") return;
+  const rows = parse(ta.value);
+  if (!rows.length) return;
+  S.rows = dlg.returnValue === "ok" ? rows : S.rows.concat(rows);
+  save(); render();
+});
+
+// Экспорт / импорт
+document.getElementById("exp").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 2)], { type: "application/json" }));
+  a.download = "finance-data.json"; a.click(); URL.revokeObjectURL(a.href);
+};
+document.getElementById("imp").onclick = () => document.getElementById("file").click();
+document.getElementById("file").onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  f.text().then(t => { const s = JSON.parse(t); if (s && s.rows && s.periods) { S = s; save(); render(); } else alert("Файл не похож на данные из этой страницы."); })
+    .catch(() => alert("Не удалось прочитать файл."));
+  e.target.value = "";
+};
+
+render();
+</script>
+</body>
+</html>
