@@ -160,7 +160,7 @@ function render() {
 
   document.getElementById("ah").innerHTML = `<th></th><th>Сейчас</th>${perHead(false)}`;
   document.getElementById("ab").innerHTML =
-    `<tr><td><b>Все вложения, ₴</b></td><td data-c="a0"></td>${cells("a", n)}</tr>
+    `<tr><td><b>Все вложения, ₴</b></td><td data-c="anow"></td>${cells("a", n)}</tr>
      <tr class="gain"><td>Прирост, ₴</td><td></td>${cells("ag", n)}</tr>`;
   calc();
 }
@@ -181,7 +181,7 @@ function calc() {
     P.forEach((p, j) => { const v = bondVal(b, p); bT[j] += v; set(`bv${i}_${j}`, v); });
   });
   set("bti", bInv); set("btq", bQty, int); set("btn", bNom); set("bto", bInv - bNom);
-  const all0 = dBase + bInv; set("a0", all0);
+  const all0 = dBase + bInv; set("anow", all0);
   P.forEach((_, j) => {
     set("dt" + j, dT[j]); set("dg" + j, dT[j] - dBase);
     set("bt" + j, bT[j]); set("bg" + j, bT[j] - bInv);
