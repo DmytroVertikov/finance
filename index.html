@@ -29,6 +29,11 @@ td input:focus,.per:focus{outline:2px solid var(--accent);outline-offset:1px;bor
 td.in input{width:110px}
 td.name input{min-width:120px}
 td.rate input{width:80px}
+td.cc select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:4px}
+.rates{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:16px}
+.rates strong{margin-right:4px}
+.rates input{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px;width:96px;text-align:right}
+.rates .dt{width:140px;text-align:left}
 td.x{width:36px;text-align:center}
 tfoot td{font-weight:600;background:var(--head)}
 tfoot tr.gain td{color:var(--gain)}
@@ -47,10 +52,13 @@ textarea{width:100%;height:160px;font:13px/1.4 ui-monospace,Menlo,Consolas,monos
 <body>
 <main>
 <h1>Мои финансы</h1>
-<p class="sub">Сумма вместе с накопленными процентами через выбранные сроки. Меняйте любые поля — всё пересчитывается и сохраняется в этом браузере.</p>
+<p class="sub">Сумма в гривнах вместе с накопленными процентами через выбранные сроки. Курсы доллара и евро задаются один раз сверху. Меняйте любые поля — всё пересчитывается и сохраняется в этом браузере.</p>
 
-<div class="bar">
-  <label>Базовая валюта <input id="cur" value="₽" maxlength="6"></label>
+<div class="rates">
+  <strong>Курсы к гривне ₴</strong>
+  <label>1 $ = <input id="r-USD" data-r="USD" inputmode="decimal" aria-label="Курс доллара"> ₴</label>
+  <label>1 € = <input id="r-EUR" data-r="EUR" inputmode="decimal" aria-label="Курс евро"> ₴</label>
+  <label>на дату <input class="dt" id="rdate" type="date"></label>
   <label>Начисление процентов
     <select id="comp">
       <option value="12">ежемесячно</option>
@@ -75,12 +83,12 @@ textarea{width:100%;height:160px;font:13px/1.4 ui-monospace,Menlo,Consolas,monos
   <input type="file" id="file" accept="application/json" hidden>
 </div>
 
-<p class="note">Ставка годовая, 0 — без процентов. Курс переводит сумму в базовую валюту. Налоги и комиссии не учитываются. Данные хранятся только в вашем браузере (localStorage) и не отправляются никуда; чтобы перенести их на другое устройство, скачайте файл и загрузите там.</p>
+<p class="note">Ставка годовая, 0 — без процентов. Суммы в долларах и евро переводятся в гривны по курсам сверху. Налоги и комиссии не учитываются. Данные хранятся только в вашем браузере (localStorage) и не отправляются никуда; чтобы перенести их на другое устройство, скачайте файл и загрузите там.</p>
 </main>
 
 <dialog id="dlg">
   <form method="dialog">
-    <p>Вставьте строки: <em>место, сумма, курс, … , ставка %</em>. Разделитель — табуляция или пробелы, десятичная запятая допустима.</p>
+    <p>Вставьте строки: <em>место, сумма, курс (или USD/EUR/UAH), … , ставка %</em>. Валюта определяется по курсу: он должен совпадать с курсом доллара или евро сверху (1 — гривна). Десятичная запятая допустима.</p>
     <textarea id="ta" placeholder="Wise	4827,48	45,2021	218212,23	3,61%"></textarea>
     <div class="actions">
       <button class="primary" id="ok" value="ok">Заменить данные</button>
@@ -91,45 +99,50 @@ textarea{width:100%;height:160px;font:13px/1.4 ui-monospace,Menlo,Consolas,monos
 </dialog>
 
 <script>
-const KEY = "finance-tracker-v1";
+const KEY = "finance-tracker-v2";
+const SYM = { USD: "$", EUR: "€", UAH: "₴" };
 const EXAMPLE = {
-  cur: "₽", comp: 12, periods: [1, 3, 6, 12, 24, 60],
+  comp: 12, periods: [1, 3, 6, 12, 24, 60],
+  rates: { USD: 45.2021, EUR: 50.5766 }, rdate: "",
   rows: [
-    { name: "Пример: вклад", amount: 1000, rate: 50, pct: 4 },
-    { name: "Пример: счёт", amount: 500, rate: 45, pct: 0 }
+    { name: "Пример: вклад", amount: 1000, cur: "USD", pct: 4 },
+    { name: "Пример: счёт", amount: 500, cur: "EUR", pct: 0 },
+    { name: "Пример: гривна", amount: 20000, cur: "UAH", pct: 8 }
   ]
 };
 let S = load();
 
 function load() {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.rows) return s; } catch (e) {}
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.rows && s.rates) return s; } catch (e) {}
   return JSON.parse(JSON.stringify(EXAMPLE));
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 
 const fmt = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const num = v => { const n = parseFloat(String(v).replace(/\s/g, "").replace(",", ".").replace("%", "")); return isFinite(n) ? n : 0; };
+const rateOf = c => c === "UAH" ? 1 : (S.rates[c] || 0);
 const grow = (base, pct, months) => { const n = +S.comp; return base * Math.pow(1 + pct / 100 / n, n * months / 12); };
 const esc = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
 function render() {
-  document.getElementById("cur").value = S.cur;
+  document.getElementById("r-USD").value = S.rates.USD;
+  document.getElementById("r-EUR").value = S.rates.EUR;
+  document.getElementById("rdate").value = S.rdate || "";
   document.getElementById("comp").value = S.comp;
-  const c = S.cur;
   document.getElementById("hr").innerHTML =
-    `<th>Где лежит</th><th>Сумма</th><th>Курс</th><th>Сумма, ${esc(c)}</th><th>Ставка, %</th>` +
+    `<th>Где лежит</th><th>Сумма</th><th>Валюта</th><th>Сумма, ₴</th><th>Ставка, %</th>` +
     S.periods.map((p, i) => `<th>через <input class="per" data-p="${i}" value="${p}" inputmode="numeric" aria-label="Срок в месяцах"> мес.</th>`).join("") + `<th></th>`;
   document.getElementById("tb").innerHTML = S.rows.map((r, i) => `<tr>
     <td class="name"><input data-i="${i}" data-f="name" value="${esc(r.name)}" aria-label="Название"></td>
     <td class="in"><input data-i="${i}" data-f="amount" value="${r.amount}" inputmode="decimal" aria-label="Сумма"></td>
-    <td class="rate"><input data-i="${i}" data-f="rate" value="${r.rate}" inputmode="decimal" aria-label="Курс"></td>
+    <td class="cc"><select data-i="${i}" data-f="cur" aria-label="Валюта">${Object.keys(SYM).map(k => `<option value="${k}"${r.cur === k ? " selected" : ""}>${SYM[k]} ${k}</option>`).join("")}</select></td>
     <td data-c="base${i}"></td>
     <td class="rate"><input data-i="${i}" data-f="pct" value="${r.pct}" inputmode="decimal" aria-label="Ставка"></td>
     ${S.periods.map((_, j) => `<td data-c="v${i}_${j}"></td>`).join("")}
     <td class="x"><button class="del" data-del="${i}" aria-label="Удалить строку" title="Удалить">×</button></td></tr>`).join("");
   document.getElementById("tf").innerHTML =
-    `<tr><td>Итого</td><td></td><td></td><td data-c="tbase"></td><td></td>${S.periods.map((_, j) => `<td data-c="t${j}"></td>`).join("")}<td></td></tr>
-     <tr class="gain"><td>Прирост</td><td></td><td></td><td></td><td></td>${S.periods.map((_, j) => `<td data-c="g${j}"></td>`).join("")}<td></td></tr>`;
+    `<tr><td>Итого, ₴</td><td></td><td></td><td data-c="tbase"></td><td></td>${S.periods.map((_, j) => `<td data-c="t${j}"></td>`).join("")}<td></td></tr>
+     <tr class="gain"><td>Прирост, ₴</td><td></td><td></td><td></td><td></td>${S.periods.map((_, j) => `<td data-c="g${j}"></td>`).join("")}<td></td></tr>`;
   calc();
 }
 
@@ -137,7 +150,7 @@ function calc() {
   const set = (k, v) => { const el = document.querySelector(`[data-c="${k}"]`); if (el) el.textContent = fmt.format(v); };
   let tb = 0; const tp = S.periods.map(() => 0);
   S.rows.forEach((r, i) => {
-    const base = r.amount * r.rate; tb += base; set("base" + i, base);
+    const base = r.amount * rateOf(r.cur); tb += base; set("base" + i, base);
     S.periods.forEach((p, j) => { const v = grow(base, r.pct, p); tp[j] += v; set(`v${i}_${j}`, v); });
   });
   set("tbase", tb);
@@ -146,30 +159,41 @@ function calc() {
 
 document.addEventListener("input", e => {
   const t = e.target;
-  if (t.id === "cur") S.cur = t.value;
-  else if (t.dataset.f) { const r = S.rows[t.dataset.i]; r[t.dataset.f] = t.dataset.f === "name" ? t.value : num(t.value); calc(); }
-  else if (t.dataset.p !== undefined) { S.periods[t.dataset.p] = Math.max(0, num(t.value)); calc(); }
+  if (t.dataset.r) S.rates[t.dataset.r] = num(t.value);
+  else if (t.id === "rdate") { S.rdate = t.value; save(); return; }
+  else if (t.dataset.f === "name") S.rows[t.dataset.i].name = t.value;
+  else if (t.dataset.f) S.rows[t.dataset.i][t.dataset.f] = t.dataset.f === "cur" ? t.value : num(t.value);
+  else if (t.dataset.p !== undefined) S.periods[t.dataset.p] = Math.max(0, num(t.value));
   else return;
-  save();
+  calc(); save();
 });
-document.getElementById("cur").addEventListener("change", render);
 document.getElementById("comp").addEventListener("change", e => { S.comp = +e.target.value; save(); calc(); });
 document.addEventListener("click", e => {
   const d = e.target.dataset.del;
   if (d !== undefined) { S.rows.splice(d, 1); save(); render(); }
 });
-document.getElementById("add").onclick = () => { S.rows.push({ name: "Новая строка", amount: 0, rate: 1, pct: 0 }); save(); render(); };
+document.getElementById("add").onclick = () => { S.rows.push({ name: "Новая строка", amount: 0, cur: "UAH", pct: 0 }); save(); render(); };
 document.getElementById("reset").onclick = () => { if (confirm("Сбросить все данные до примера?")) { S = JSON.parse(JSON.stringify(EXAMPLE)); save(); render(); } };
 
 // Вставка из таблицы
 const dlg = document.getElementById("dlg"), ta = document.getElementById("ta");
 document.getElementById("paste").onclick = () => { ta.value = ""; dlg.showModal(); };
+function curFrom(tok) {
+  if (/^(USD|\$)$/i.test(tok)) return "USD";
+  if (/^(EUR|€)$/i.test(tok)) return "EUR";
+  if (/^(UAH|₴|грн)$/i.test(tok)) return "UAH";
+  const r = num(tok);
+  if (Math.abs(r - 1) < 1e-9) return "UAH";
+  if (Math.abs(r - S.rates.EUR) < 1e-3) return "EUR";
+  if (Math.abs(r - S.rates.USD) < 1e-3) return "USD";
+  return "USD";
+}
 function parse(text) {
   return text.split(/\n/).map(l => l.trim()).filter(Boolean).map(l => {
-    const t = l.split(/\t+|\s{2,}|\s+(?=[-\d])/).filter(Boolean);
+    const t = l.split(/\t+|\s{2,}|\s+(?=[-\d$€₴])/).filter(Boolean);
     if (t.length < 3) return null;
     const last = t[t.length - 1];
-    return { name: t[0], amount: num(t[1]), rate: num(t[2]), pct: t.length > 3 && /%/.test(last) ? num(last) : 0 };
+    return { name: t[0], amount: num(t[1]), cur: curFrom(t[2]), pct: t.length > 3 && /%/.test(last) ? num(last) : 0 };
   }).filter(Boolean);
 }
 dlg.addEventListener("close", () => {
@@ -189,7 +213,7 @@ document.getElementById("exp").onclick = () => {
 document.getElementById("imp").onclick = () => document.getElementById("file").click();
 document.getElementById("file").onchange = e => {
   const f = e.target.files[0]; if (!f) return;
-  f.text().then(t => { const s = JSON.parse(t); if (s && s.rows && s.periods) { S = s; save(); render(); } else alert("Файл не похож на данные из этой страницы."); })
+  f.text().then(t => { const s = JSON.parse(t); if (s && s.rows && s.periods && s.rates) { S = s; save(); render(); } else alert("Файл не похож на данные из этой страницы."); })
     .catch(() => alert("Не удалось прочитать файл."));
   e.target.value = "";
 };
